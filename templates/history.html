@@ -1,0 +1,115 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}History{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0"><i class="fas fa-history me-2 text-info"></i>Activity History</h4>
+    <form method="get" class="d-flex gap-2">
+        <input type="search" name="q" class="form-control" placeholder="Search..." value="{{ query }}" style="max-width: 250px;">
+        <select name="type" class="form-select" style="max-width: 150px;" onchange="this.form.submit()">
+            <option value="">All Types</option>
+            <option value="speech" {% if filter_type == 'speech' %}selected{% endif %}>Speech</option>
+            <option value="translation" {% if filter_type == 'translation' %}selected{% endif %}>Translation</option>
+            <option value="tts" {% if filter_type == 'tts' %}selected{% endif %}>TTS</option>
+        </select>
+        <button type="submit" class="btn btn-outline-primary"><i class="fas fa-search"></i></button>
+    </form>
+</div>
+
+<div class="card border-0 shadow-sm">
+    <div class="card-body p-0">
+        {% if history_items %}
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-4">Type</th>
+                            <th>Source Text</th>
+                            <th>Translated Text</th>
+                            <th>Language</th>
+                            <th>Audio</th>
+                            <th class="text-end pe-4">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in history_items %}
+                            <tr>
+                                <td class="ps-4">
+                                    {% if item.type == 'speech' %}
+                                        <span class="badge bg-primary bg-opacity-10 text-primary">
+                                            <i class="fas fa-microphone me-1"></i>Speech
+                                        </span>
+                                    {% elif item.type == 'translation' %}
+                                        <span class="badge bg-success bg-opacity-10 text-success">
+                                            <i class="fas fa-language me-1"></i>Translate
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-warning bg-opacity-10 text-warning">
+                                            <i class="fas fa-volume-up me-1"></i>TTS
+                                        </span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-truncate" style="max-width: 200px;">{{ item.source_text|truncatechars:50 }}</td>
+                                <td class="text-truncate" style="max-width: 200px;">{{ item.translated_text|truncatechars:50|default:"-" }}</td>
+                                <td>{{ item.target_language|default:"-" }}</td>
+                                <td>
+                                    {% if item.audio_file %}
+                                        <a href="{{ item.audio_file.url }}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                            <i class="fas fa-play"></i>
+                                        </a>
+                                    {% else %}
+                                        <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end pe-4">
+                                    <div class="d-flex gap-1 justify-content-end">
+                                        {% if item.audio_file %}
+                                            <a href="{{ item.audio_file.url }}" download class="btn btn-sm btn-outline-success">
+                                                <i class="fas fa-download"></i>
+                                            </a>
+                                        {% endif %}
+                                        <form method="post" class="d-inline">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="delete_id" value="{{ item.id }}">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete this item?')">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if history_items.paginator.num_pages > 1 %}
+                <div class="d-flex justify-content-center py-3">
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0">
+                            {% if history_items.has_previous %}
+                                <li class="page-item"><a class="page-link" href="?page=1">&laquo;</a></li>
+                                <li class="page-item"><a class="page-link" href="?page={{ history_items.previous_page_number }}">{{ history_items.previous_page_number }}</a></li>
+                            {% endif %}
+                            <li class="page-item active"><span class="page-link">{{ history_items.number }}</span></li>
+                            {% if history_items.has_next %}
+                                <li class="page-item"><a class="page-link" href="?page={{ history_items.next_page_number }}">{{ history_items.next_page_number }}</a></li>
+                                <li class="page-item"><a class="page-link" href="?page={{ history_items.paginator.num_pages }}">&raquo;</a></li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                </div>
+            {% endif %}
+        {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-inbox text-muted fa-3x mb-3"></i>
+                <p class="text-muted mb-0">No history found.</p>
+                {% if query or filter_type %}
+                    <a href="{% url 'history:history' %}" class="btn btn-outline-primary btn-sm mt-2">Clear Filters</a>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

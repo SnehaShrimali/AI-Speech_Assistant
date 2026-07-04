@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="min-vh-100 d-flex align-items-center justify-content-center" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+    <div class="text-center text-white px-4">
+        <img src="{% static 'images/logo.png' %}" alt="AI Speech" class="mb-4" style="width: 80px; height: 80px; border-radius: 50%; background: rgba(255,255,255,0.2); padding: 15px;" onerror="this.style.display='none'">
+        <h1 class="display-3 fw-bold mb-3">AI Speech</h1>
+        <p class="lead fs-4 mb-4 opacity-90">Intelligent Speech Recognition & Translation Platform</p>
+        <p class="mb-5 fs-5 opacity-75">Convert speech to text, translate languages, and generate natural voice output.</p>
+        <div class="d-flex justify-content-center gap-3">
+            <a href="{% url 'accounts:register' %}" class="btn btn-light btn-lg px-5 py-3 fw-semibold rounded-pill">
+                <i class="fas fa-user-plus me-2"></i>Get Started
+            </a>
+            <a href="{% url 'accounts:login' %}" class="btn btn-outline-light btn-lg px-5 py-3 fw-semibold rounded-pill">
+                <i class="fas fa-sign-in-alt me-2"></i>Login
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

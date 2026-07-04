@@ -1,0 +1,152 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Speech Recognition{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0"><i class="fas fa-microphone me-2 text-primary"></i>Speech Recognition</h4>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body p-4">
+                <h5 class="fw-bold mb-3"><i class="fas fa-record-vinyl me-2 text-danger"></i>Record Audio</h5>
+                <p class="text-muted small mb-3">Click the button below and start speaking. Supported formats: WAV, MP3, M4A.</p>
+                <div class="text-center py-4">
+                    <button id="startRecord" class="btn btn-danger btn-lg rounded-circle p-4 mb-3" title="Start Recording">
+                        <i class="fas fa-microphone fa-2x"></i>
+                    </button>
+                    <button id="stopRecord" class="btn btn-secondary btn-lg rounded-circle p-4 mb-3 d-none" title="Stop Recording">
+                        <i class="fas fa-stop fa-2x"></i>
+                    </button>
+                    <div id="recordingStatus" class="text-muted small">Click the microphone to start recording</div>
+                    <div id="recordingTimer" class="text-muted small d-none">00:00</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body p-4">
+                <h5 class="fw-bold mb-3"><i class="fas fa-upload me-2 text-info"></i>Upload Audio File</h5>
+                <p class="text-muted small mb-3">Upload an audio file for speech recognition. Max size: 25MB.</p>
+                <form method="post" enctype="multipart/form-data" id="uploadForm">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label fw-medium">Choose Audio File</label>
+                        <input type="file" name="audio_file" class="form-control" accept=".wav,.mp3,.m4a,.ogg,.flac" required>
+                        <div class="form-text">Supported: WAV, MP3, M4A, OGG, FLAC</div>
+                    </div>
+                    <button type="submit" name="upload_audio" class="btn btn-info text-white w-100 py-2 fw-semibold">
+                        <i class="fas fa-cloud-upload-alt me-2"></i>Upload & Process
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h5 class="fw-bold mb-3"><i class="fas fa-file-alt me-2 text-success"></i>Recognized Text</h5>
+                {% if recognized_text %}
+                    <div class="bg-light p-4 rounded-3 mb-3">
+                        <p class="mb-0">{{ recognized_text }}</p>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="{% url 'translation:translate' %}?text={{ recognized_text|urlencode }}" class="btn btn-success">
+                            <i class="fas fa-language me-1"></i>Translate
+                        </a>
+                        <button class="btn btn-outline-secondary" onclick="copyText()">
+                            <i class="fas fa-copy me-1"></i>Copy
+                        </button>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <i class="fas fa-file-audio text-muted fa-3x mb-3"></i>
+                        <p class="text-muted mb-0">Record or upload audio to see recognized text here.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let mediaRecorder;
+    let audioChunks = [];
+    let recordingTimer;
+    let seconds = 0;
+
+    document.getElementById('startRecord')?.addEventListener('click', async function() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+            audioChunks = [];
+
+            mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+            mediaRecorder.onstop = async () => {
+                const audioBlob = new Blob(audioChunks, { type: 'audio/webm;codecs=opus' });
+                const formData = new FormData();
+                formData.append('audio_blob', audioBlob, 'recording.webm');
+                formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+
+                document.getElementById('recordingStatus').textContent = 'Processing...';
+                try {
+                    const response = await fetch('{% url "speech:process_recording" %}', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        location.reload();
+                    } else {
+                        document.getElementById('recordingStatus').textContent = 'Error: ' + result.error;
+                    }
+                } catch (err) {
+                    document.getElementById('recordingStatus').textContent = 'Error processing recording';
+                }
+                stream.getTracks().forEach(t => t.stop());
+            };
+
+            mediaRecorder.start();
+            this.classList.add('d-none');
+            document.getElementById('stopRecord').classList.remove('d-none');
+            document.getElementById('recordingStatus').textContent = 'Recording...';
+            document.getElementById('recordingTimer').classList.remove('d-none');
+            seconds = 0;
+            recordingTimer = setInterval(() => {
+                seconds++;
+                const m = String(Math.floor(seconds / 60)).padStart(2, '0');
+                const s = String(seconds % 60).padStart(2, '0');
+                document.getElementById('recordingTimer').textContent = m + ':' + s;
+            }, 1000);
+        } catch (err) {
+            document.getElementById('recordingStatus').textContent = 'Microphone access denied. Please allow microphone permissions.';
+        }
+    });
+
+    document.getElementById('stopRecord')?.addEventListener('click', function() {
+        if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+            mediaRecorder.stop();
+            this.classList.add('d-none');
+            document.getElementById('startRecord').classList.remove('d-none');
+            clearInterval(recordingTimer);
+            document.getElementById('recordingTimer').classList.add('d-none');
+            document.getElementById('recordingStatus').textContent = 'Processing audio...';
+        }
+    });
+
+    function copyText() {
+        const text = `{{ recognized_text|escapejs }}`;
+        navigator.clipboard.writeText(text).then(() => {
+            alert('Text copied to clipboard!');
+        });
+    }
+</script>
+{% endblock %}

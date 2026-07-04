@@ -1,0 +1,47 @@
+# Virtual Environment
+venv/
+env/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+.Python
+
+# Django
+db.sqlite3
+*.sqlite3
+local_settings.py
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Media files
+media/uploads/*
+media/audio/*
+media/output/*
+!media/uploads/.gitkeep
+!media/audio/.gitkeep
+!media/output/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Virtual environment backup
+venv_backup/
