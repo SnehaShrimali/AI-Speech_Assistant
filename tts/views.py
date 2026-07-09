@@ -1,7 +1,12 @@
-from django.views.generic import TemplateView
+import os
+import json
+from django.views.generic import TemplateView, View
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.shortcuts import render, redirect
 from django.contrib import messages
+from django.http import JsonResponse, HttpResponse
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 from .models import TTSRecord
 from .services import generate_speech
 from translation.services import SUPPORTED_LANGUAGES
@@ -71,3 +76,46 @@ class TTSView(LoginRequiredMixin, TemplateView):
         context['selected_lang'] = self.request.GET.get('lang', '')
         context['audio_url'] = kwargs.get('audio_url', '')
         return context
+
+
+class TTSAPIView(LoginRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        text = data.get('text', '').strip()
+        language = data.get('language', 'en')
+        slow = data.get('slow', False)
+
+        if not text:
+            return JsonResponse({'error': 'No text provided'}, status=400)
+        if language not in SUPPORTED_LANGUAGES:
+            return JsonResponse({'error': 'Unsupported language'}, status=400)
+
+        try:
+            relative_path, _ = generate_speech(text, language, slow=slow)
+
+            TTSRecord.objects.create(
+                user=request.user,
+                text=text,
+                audio_file=relative_path,
+                language=language,
+            )
+
+            add_history_entry(
+                user=request.user,
+                history_type='tts',
+                source_text=text,
+                target_language=language,
+            )
+
+            return JsonResponse({
+                'success': True,
+                'audio_url': f'/media/{relative_path}',
+                'filename': os.path.basename(relative_path),
+            })
+
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)

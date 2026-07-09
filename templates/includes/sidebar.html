@@ -17,6 +17,11 @@
             </a>
         </li>
         <li class="nav-item">
+            <a href="{% url 'live_translate' %}" class="nav-link {% if request.resolver_match.url_name == 'live_translate' %}active{% endif %}">
+                <i class="fas fa-bolt me-2"></i>Live Translate
+            </a>
+        </li>
+        <li class="nav-item">
             <a href="{% url 'translation:translate' %}" class="nav-link {% if request.resolver_match.url_name == 'translate' %}active{% endif %}">
                 <i class="fas fa-language me-2"></i>Translation
             </a>

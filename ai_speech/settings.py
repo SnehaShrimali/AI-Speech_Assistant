@@ -1,4 +1,6 @@
 import os
+import socket
+import warnings
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -62,16 +64,13 @@ TEMPLATES = [
 WSGI_APPLICATION = 'ai_speech.wsgi.application'
 
 try:
-    from psycopg2 import OperationalError
-    import socket
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(1)
-    s.connect((os.getenv('DB_HOST', 'localhost'), int(os.getenv('DB_PORT', '5432'))))
-    s.close()
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(1.5)
+    sock.connect((os.getenv('DB_HOST', 'localhost'), int(os.getenv('DB_PORT', '5432'))))
+    sock.close()
     DB_ENGINE = 'django.db.backends.postgresql'
 except Exception:
     DB_ENGINE = 'django.db.backends.sqlite3'
-    import warnings
     warnings.warn("PostgreSQL not available. Falling back to SQLite for development.")
 
 DATABASES = {
@@ -120,3 +119,8 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 26214400
 SESSION_COOKIE_AGE = 86400
 SESSION_COOKIE_SECURE = False
 CSRF_COOKIE_SECURE = False
+
+# Speech Recognition Settings
+WHISPER_MODEL_SIZE = os.getenv('WHISPER_MODEL_SIZE', 'base')
+MAX_UPLOAD_SIZE = 25 * 1024 * 1024
+MAX_RECORDING_DURATION = 300
