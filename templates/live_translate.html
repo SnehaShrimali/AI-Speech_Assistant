@@ -1,0 +1,674 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Live Speech Translation{% endblock %}
+
+{% block extra_css %}
+<style>
+  .live-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 2rem; color: #fff; }
+  .live-header h2 { font-weight: 700; margin-bottom: 0.25rem; }
+  .live-header p { opacity: 0.85; margin-bottom: 0; font-size: 0.9rem; }
+  .recording-controls { display: flex; align-items: center; justify-content: center; gap: 0.75rem; flex-wrap: wrap; }
+  .rec-btn { width: 56px; height: 56px; border-radius: 50%; border: none; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; transition: all 0.25s; cursor: pointer; }
+  .rec-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .rec-btn:hover:not(:disabled) { transform: scale(1.08); }
+  .rec-btn.recording { background: #dc3545; color: #fff; animation: rec-pulse 1.2s ease-in-out infinite; box-shadow: 0 0 0 0 rgba(220,53,69,0.5); }
+  .rec-btn.recording-pause { background: #ffc107; color: #000; }
+  @keyframes rec-pulse { 0%{transform:scale(1);box-shadow:0 0 0 0 rgba(220,53,69,0.5)} 50%{transform:scale(1.06);box-shadow:0 0 0 16px rgba(220,53,69,0)} 100%{transform:scale(1);box-shadow:0 0 0 0 rgba(220,53,69,0)} }
+  .live-wave { display:flex; align-items:center; justify-content:center; gap:3px; height:40px; }
+  .live-wave.hidden { visibility:hidden; }
+  .live-wave span { width:5px; background:linear-gradient(180deg,#667eea,#764ba2); border-radius:3px; animation:wave 0.7s ease-in-out infinite alternate; }
+  .live-wave span:nth-child(1){height:12px;animation-delay:0s}
+  .live-wave span:nth-child(2){height:22px;animation-delay:0.08s}
+  .live-wave span:nth-child(3){height:32px;animation-delay:0.16s}
+  .live-wave span:nth-child(4){height:26px;animation-delay:0.24s}
+  .live-wave span:nth-child(5){height:38px;animation-delay:0.32s}
+  .live-wave span:nth-child(6){height:18px;animation-delay:0.40s}
+  .live-wave span:nth-child(7){height:30px;animation-delay:0.48s}
+  .live-wave span:nth-child(8){height:14px;animation-delay:0.56s}
+  @keyframes wave{0%{transform:scaleY(0.35)}100%{transform:scaleY(1)}}
+  .live-status { font-size:0.85rem; min-height:24px; }
+  .lang-badge { padding:4px 12px; border-radius:20px; font-size:0.8rem; font-weight:500; }
+  .lang-badge.active-lang { background:rgba(102,126,234,0.12); color:#667eea; }
+  .text-box { min-height:100px; max-height:250px; overflow-y:auto; padding:1rem; border-radius:10px; background:#f8f9fc; font-size:0.95rem; line-height:1.6; transition:background 0.2s; }
+  .text-box:focus { outline:2px solid rgba(102,126,234,0.3); }
+  [data-bs-theme="dark"] .text-box { background:#1a1a2e; color:#e2e8f0; }
+  .text-box .interim { color:#94a3b8; font-style:italic; }
+  .lang-dropdown-menu { max-height:280px; overflow-y:auto; width:260px; padding:0.5rem; }
+  .lang-dropdown-menu .search-input { width:100%; padding:0.5rem 0.75rem; border-radius:8px; border:1px solid #dee2e6; font-size:0.85rem; margin-bottom:0.5rem; }
+  .lang-dropdown-menu .lang-item { padding:0.4rem 0.75rem; border-radius:6px; cursor:pointer; font-size:0.85rem; transition:all 0.15s; }
+  .lang-dropdown-menu .lang-item:hover { background:rgba(102,126,234,0.1); }
+  .lang-dropdown-menu .lang-item.active { background:rgba(102,126,234,0.15); color:#667eea; font-weight:600; }
+  .stats-badge { display:inline-flex; align-items:center; gap:0.4rem; padding:0.3rem 0.8rem; border-radius:20px; font-size:0.8rem; font-weight:500; background:#f1f5f9; color:#475569; }
+  [data-bs-theme="dark"] .stats-badge { background:#2a2a4a; color:#cbd5e1; }
+  .voice-option-btn { padding:0.5rem 1rem; border-radius:8px; border:1.5px solid #e2e8f0; background:transparent; cursor:pointer; font-size:0.85rem; font-weight:500; transition:all 0.2s; }
+  .voice-option-btn:hover { border-color:#667eea; }
+  .voice-option-btn.active { border-color:#667eea; background:rgba(102,126,234,0.08); color:#667eea; }
+  [data-bs-theme="dark"] .voice-option-btn { border-color:#2a2a4a; color:#e2e8f0; }
+  [data-bs-theme="dark"] .voice-option-btn.active { border-color:#667eea; background:rgba(102,126,234,0.15); }
+  .download-btn-group { display:flex; flex-wrap:wrap; gap:0.4rem; }
+  .download-btn-group .btn { font-size:0.8rem; padding:0.35rem 0.75rem; border-radius:8px; }
+  .progress-thin { height:4px; border-radius:2px; }
+  @keyframes fadeSlideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .fade-slide-in { animation:fadeSlideIn 0.3s ease; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="live-header mb-4 shadow-sm fade-slide-in">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+      <h2><i class="fas fa-bolt me-2"></i>Live Speech Translation</h2>
+      <p>Speak naturally — your words are transcribed, translated, and ready to convert to speech in real time.</p>
+    </div>
+    <div class="d-flex align-items-center gap-3">
+      <div class="dropdown">
+        <button class="btn btn-light btn-sm rounded-pill px-3 dropdown-toggle fw-medium" data-bs-toggle="dropdown" id="langDropdownBtn">
+          <i class="fas fa-globe me-1"></i> <span id="selectedLangLabel">Select Language</span>
+        </button>
+        <div class="dropdown-menu dropdown-menu-end lang-dropdown-menu shadow" id="langDropdown">
+          <input type="text" class="search-input" id="langSearch" placeholder="Search language..." autofocus>
+          <div id="langList">
+            {% for code, name in languages.items %}
+            <div class="lang-item" data-lang="{{ code }}" data-name="{{ name }}">{{ name }}</div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <span class="badge bg-white bg-opacity-25 text-white rounded-pill px-3 py-2" id="statusBadge">
+        <i class="fas fa-circle text-success me-1" style="font-size:8px"></i> Ready
+      </span>
+    </div>
+  </div>
+</div>
+
+<div class="row g-3">
+  <!-- Left: Recording & Speech -->
+  <div class="col-lg-7">
+    <div class="card border-0 shadow-sm h-100">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="fw-bold mb-0"><i class="fas fa-microphone me-2 text-danger"></i>Live Speech</h5>
+          <div class="d-flex gap-2">
+            <span class="stats-badge" id="timerDisplay"><i class="far fa-clock"></i> 00:00</span>
+            <span class="stats-badge" id="wordCountBadge"><i class="fas fa-font"></i> 0 words</span>
+            <span class="stats-badge" id="charCountBadge"><i class="fas fa-text-width"></i> 0 chars</span>
+          </div>
+        </div>
+
+        <div class="live-wave hidden mb-3" id="liveWave">
+          <span></span><span></span><span></span><span></span>
+          <span></span><span></span><span></span><span></span>
+        </div>
+
+        <div class="recording-controls mb-3">
+          <button class="rec-btn btn-success shadow-sm" id="startBtn" title="Start Speaking">
+            <i class="fas fa-play"></i>
+          </button>
+          <button class="rec-btn btn-warning shadow-sm d-none" id="pauseBtn" title="Pause">
+            <i class="fas fa-pause"></i>
+          </button>
+          <button class="rec-btn btn-danger recording d-none" id="stopBtn" title="Stop">
+            <i class="fas fa-stop"></i>
+          </button>
+          <button class="rec-btn btn-secondary shadow-sm" id="clearBtn" title="Clear">
+            <i class="fas fa-eraser"></i>
+          </button>
+        </div>
+
+        <div class="live-status text-muted mb-2 text-center" id="liveStatus">
+          <i class="fas fa-info-circle me-1"></i> Click <strong>Start</strong> and begin speaking
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="fw-medium small"><i class="fas fa-comment me-1 text-primary"></i>Original Speech</span>
+          <div class="d-flex gap-1">
+            <button class="btn btn-sm btn-outline-secondary px-2 py-0" id="copyOriginalBtn" title="Copy original">
+              <i class="fas fa-copy"></i>
+            </button>
+          </div>
+        </div>
+        <div class="text-box mb-3" id="originalTextBox" contenteditable="false">
+          <span class="text-muted" id="originalPlaceholder">Your speech will appear here...</span>
+        </div>
+
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <span class="fw-medium small"><i class="fas fa-language me-1 text-success"></i>Translation</span>
+          <div class="d-flex gap-1">
+            <button class="btn btn-sm btn-outline-secondary px-2 py-0" id="copyTranslationBtn" title="Copy translation">
+              <i class="fas fa-copy"></i>
+            </button>
+          </div>
+        </div>
+        <div class="text-box" id="translationTextBox">
+          <span class="text-muted" id="translationPlaceholder">Translation will appear here...</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: TTS & Downloads -->
+  <div class="col-lg-5">
+    <div class="card border-0 shadow-sm mb-3">
+      <div class="card-body p-4">
+        <h5 class="fw-bold mb-3"><i class="fas fa-volume-up me-2 text-warning"></i>Voice Generator</h5>
+
+        <div class="mb-3">
+          <label class="form-label small fw-medium">Voice Speed</label>
+          <div class="d-flex gap-2">
+            <button class="voice-option-btn active" data-speed="normal" id="speedNormal">Normal</button>
+            <button class="voice-option-btn" data-speed="slow" id="speedSlow">Slow</button>
+          </div>
+        </div>
+
+        <div class="d-grid gap-2 mb-3">
+          <button class="btn btn-warning text-white fw-semibold py-2" id="generateVoiceBtn" disabled>
+            <i class="fas fa-magic me-1"></i> Generate Voice
+          </button>
+        </div>
+
+        <div id="audioPlayerContainer" class="d-none">
+          <div class="bg-light rounded-3 p-3 mb-2">
+            <audio id="generatedAudio" class="w-100" controls>
+              <source src="" type="audio/mpeg">
+            </audio>
+          </div>
+          <div class="d-flex gap-2">
+            <a id="downloadMp3Btn" class="btn btn-outline-success btn-sm flex-fill" download>
+              <i class="fas fa-download me-1"></i>MP3
+            </a>
+            <button id="downloadWavBtn" class="btn btn-outline-info btn-sm flex-fill" disabled>
+              <i class="fas fa-file-audio me-1"></i>WAV
+            </button>
+          </div>
+          <div class="text-muted small mt-2" id="ttsStatus"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-4">
+        <h5 class="fw-bold mb-3"><i class="fas fa-download me-2 text-info"></i>Downloads</h5>
+
+        <div class="mb-3">
+          <label class="form-label small fw-medium text-muted">Transcript Formats</label>
+          <div class="download-btn-group">
+            <button class="btn btn-outline-primary download-btn" data-format="txt" disabled>
+              <i class="fas fa-file-alt"></i> TXT
+            </button>
+            <button class="btn btn-outline-danger download-btn" data-format="pdf" disabled>
+              <i class="fas fa-file-pdf"></i> PDF
+            </button>
+            <button class="btn btn-outline-success download-btn" data-format="docx" disabled>
+              <i class="fas fa-file-word"></i> DOCX
+            </button>
+            <button class="btn btn-outline-secondary download-btn" data-format="srt" disabled>
+              <i class="fas fa-closed-captioning"></i> SRT
+            </button>
+            <button class="btn btn-outline-warning download-btn" data-format="json" disabled>
+              <i class="fas fa-file-code"></i> JSON
+            </button>
+          </div>
+        </div>
+
+        <div class="progress progress-thin mb-2 d-none" id="downloadProgress">
+          <div class="progress-bar progress-bar-striped progress-bar-animated" style="width:100%"></div>
+        </div>
+        <div class="text-muted small" id="downloadStatus"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  'use strict';
+
+  /* ---- DOM refs ---- */
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const liveStatus = document.getElementById('liveStatus');
+  const liveWave = document.getElementById('liveWave');
+  const timerDisplay = document.getElementById('timerDisplay');
+  const wordCountBadge = document.getElementById('wordCountBadge');
+  const charCountBadge = document.getElementById('charCountBadge');
+  const originalTextBox = document.getElementById('originalTextBox');
+  const originalPlaceholder = document.getElementById('originalPlaceholder');
+  const translationTextBox = document.getElementById('translationTextBox');
+  const translationPlaceholder = document.getElementById('translationPlaceholder');
+  const langDropdownBtn = document.getElementById('langDropdownBtn');
+  const selectedLangLabel = document.getElementById('selectedLangLabel');
+  const langSearch = document.getElementById('langSearch');
+  const langList = document.getElementById('langList');
+  const statusBadge = document.getElementById('statusBadge');
+  const generateVoiceBtn = document.getElementById('generateVoiceBtn');
+  const audioPlayerContainer = document.getElementById('audioPlayerContainer');
+  const generatedAudio = document.getElementById('generatedAudio');
+  const downloadMp3Btn = document.getElementById('downloadMp3Btn');
+  const ttsStatus = document.getElementById('ttsStatus');
+  const copyOriginalBtn = document.getElementById('copyOriginalBtn');
+  const copyTranslationBtn = document.getElementById('copyTranslationBtn');
+  const speedNormal = document.getElementById('speedNormal');
+  const speedSlow = document.getElementById('speedSlow');
+
+  /* ---- State ---- */
+  let recognition = null;
+  let isRecording = false;
+  let isPaused = false;
+  let finalTranscript = '';
+  let interimTranscript = '';
+  let translatedText = '';
+  let selectedLang = '';
+  let timerInterval = null;
+  let seconds = 0;
+  let voiceSpeed = 'normal';
+  let lastAudioUrl = '';
+  let recognitionRestartTimer = null;
+
+  /* ---- Language search ---- */
+  langSearch.addEventListener('input', function() {
+    const q = this.value.toLowerCase();
+    langList.querySelectorAll('.lang-item').forEach(el => {
+      el.style.display = el.dataset.name.toLowerCase().includes(q) ? 'block' : 'none';
+    });
+  });
+
+  langList.addEventListener('click', function(e) {
+    const item = e.target.closest('.lang-item');
+    if (!item) return;
+    selectedLang = item.dataset.lang;
+    selectedLangLabel.textContent = item.dataset.name;
+    langList.querySelectorAll('.lang-item').forEach(el => el.classList.remove('active'));
+    item.classList.add('active');
+    const dd = bootstrap.Dropdown.getInstance(langDropdownBtn);
+    if (dd) dd.hide();
+    if (finalTranscript.trim()) {
+      translateChunk(finalTranscript, true);
+    }
+  });
+
+  /* ---- Web Speech API ---- */
+  function initRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setStatus('error', '<i class="fas fa-exclamation-triangle me-1"></i> Speech recognition not supported in this browser. Try Chrome.');
+      return null;
+    }
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-US';
+    rec.maxAlternatives = 1;
+    return rec;
+  }
+
+  function startListening() {
+    if (!selectedLang) {
+      setStatus('error', '<i class="fas fa-globe me-1"></i> Please select a target language first.');
+      return;
+    }
+    if (!recognition) recognition = initRecognition();
+    if (!recognition) return;
+
+    if (isPaused) {
+      isPaused = false;
+      try { recognition.start(); } catch(e) {}
+      updateUI();
+      setStatus('info', '<i class="fas fa-circle text-success me-1" style="font-size:8px"></i> Listening...');
+      return;
+    }
+
+    recognition.onresult = function(event) {
+      interimTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (result.isFinal) {
+          finalTranscript += (finalTranscript ? ' ' : '') + result[0].transcript;
+          translateChunk(result[0].transcript, false);
+        } else {
+          interimTranscript += result[0].transcript;
+        }
+      }
+      updateTranscriptDisplay();
+    };
+
+    recognition.onerror = function(event) {
+      if (event.error === 'no-speech') {
+        // silent, continue
+        return;
+      }
+      if (event.error === 'aborted') return;
+      setStatus('error', '<i class="fas fa-exclamation-circle me-1"></i> Recognition error: ' + event.error);
+      stopListening();
+    };
+
+    recognition.onend = function() {
+      if (isRecording && !isPaused) {
+        // auto-restart for continuous mode
+        recognitionRestartTimer = setTimeout(() => {
+          if (isRecording && !isPaused) {
+            try { recognition.start(); } catch(e) {}
+          }
+        }, 300);
+      }
+    };
+
+    try {
+      recognition.start();
+      isRecording = true;
+      isPaused = false;
+      seconds = 0;
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        seconds++;
+        timerDisplay.innerHTML = '<i class="far fa-clock"></i> ' + formatTime(seconds);
+      }, 1000);
+      updateUI();
+      setStatus('success', '<i class="fas fa-circle me-1" style="font-size:8px;color:#22c55e"></i> Listening... Speak now');
+      statusBadge.innerHTML = '<i class="fas fa-circle text-success me-1" style="font-size:8px"></i> Recording';
+    } catch(e) {
+      setStatus('error', '<i class="fas fa-exclamation-circle me-1"></i> Could not start recognition: ' + e.message);
+    }
+  }
+
+  function pauseListening() {
+    if (recognition) {
+      try { recognition.stop(); } catch(e) {}
+    }
+    isPaused = true;
+    clearTimeout(recognitionRestartTimer);
+    updateUI();
+    setStatus('info', '<i class="fas fa-pause me-1"></i> Paused. Click Play to resume.');
+    statusBadge.innerHTML = '<i class="fas fa-circle text-warning me-1" style="font-size:8px"></i> Paused';
+  }
+
+  function stopListening() {
+    clearTimeout(recognitionRestartTimer);
+    if (recognition) {
+      try { recognition.stop(); } catch(e) {}
+    }
+    isRecording = false;
+    isPaused = false;
+    clearInterval(timerInterval);
+    updateUI();
+    liveWave.classList.add('hidden');
+    setStatus('info', '<i class="fas fa-check-circle me-1"></i> Recording stopped');
+    statusBadge.innerHTML = '<i class="fas fa-circle me-1" style="font-size:8px;color:#22c55e"></i> Ready';
+    if (finalTranscript.trim() && selectedLang) {
+      translateChunk(finalTranscript, true);
+    }
+  }
+
+  function translateChunk(text, isFull) {
+    if (!selectedLang || !text.trim()) return;
+    const payload = JSON.stringify({ text: text, target_lang: selectedLang });
+
+    fetch('{% url "translation:translate_api" %}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+      body: payload,
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (data.success) {
+        if (isFull) {
+          translatedText = data.translated;
+        } else {
+          translatedText = data.translated;
+        }
+        updateTranslationDisplay();
+        generateVoiceBtn.disabled = false;
+      }
+    })
+    .catch(() => {});
+  }
+
+  /* ---- Display updates ---- */
+  function updateTranscriptDisplay() {
+    let html = '';
+    if (finalTranscript) {
+      html += escapeHtml(finalTranscript);
+    }
+    if (interimTranscript) {
+      html += ' <span class="interim">' + escapeHtml(interimTranscript) + '</span>';
+    }
+    if (!html) {
+      originalTextBox.innerHTML = '<span class="text-muted" id="originalPlaceholder">Your speech will appear here...</span>';
+    } else {
+      originalPlaceholder.style.display = 'none';
+      originalTextBox.innerHTML = html;
+      originalTextBox.scrollTop = originalTextBox.scrollHeight;
+    }
+    const words = finalTranscript.trim() ? finalTranscript.trim().split(/\s+/).length : 0;
+    const chars = finalTranscript.length;
+    wordCountBadge.innerHTML = '<i class="fas fa-font"></i> ' + words + ' word' + (words !== 1 ? 's' : '');
+    charCountBadge.innerHTML = '<i class="fas fa-text-width"></i> ' + chars + ' char' + (chars !== 1 ? 's' : '');
+  }
+
+  function updateTranslationDisplay() {
+    if (translatedText) {
+      translationTextBox.innerHTML = escapeHtml(translatedText);
+      translationPlaceholder.style.display = 'none';
+      generateVoiceBtn.disabled = false;
+    }
+  }
+
+  /* ---- Voice generation ---- */
+  generateVoiceBtn.addEventListener('click', function() {
+    const text = translatedText || finalTranscript;
+    if (!text.trim() || !selectedLang) {
+      setStatus('error', '<i class="fas fa-exclamation-circle me-1"></i> Nothing to convert to speech.');
+      return;
+    }
+    this.disabled = true;
+    this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generating...';
+    ttsStatus.textContent = 'Generating speech...';
+
+    const slow = voiceSpeed === 'slow';
+    fetch('{% url "tts:tts_api" %}', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+      body: JSON.stringify({ text: text, language: selectedLang, slow: slow }),
+    })
+    .then(r => r.json())
+    .then(data => {
+      this.disabled = false;
+      this.innerHTML = '<i class="fas fa-magic me-1"></i> Generate Voice';
+      if (data.success) {
+        lastAudioUrl = data.audio_url;
+        audioPlayerContainer.classList.remove('d-none');
+        generatedAudio.querySelector('source').src = data.audio_url;
+        generatedAudio.load();
+        generatedAudio.play().catch(() => {});
+        downloadMp3Btn.href = data.audio_url;
+        ttsStatus.textContent = 'Speech generated successfully!';
+      } else {
+        ttsStatus.textContent = 'Error: ' + (data.error || 'Generation failed');
+      }
+    })
+    .catch(err => {
+      this.disabled = false;
+      this.innerHTML = '<i class="fas fa-magic me-1"></i> Generate Voice';
+      ttsStatus.textContent = 'Network error. Please try again.';
+    });
+  });
+
+  /* ---- Download handlers ---- */
+  document.querySelectorAll('.download-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const format = this.dataset.format;
+      const original = finalTranscript;
+      const translated = translatedText;
+      if (!original.trim() && !translated.trim()) return;
+
+      const endpoints = {
+        txt: '{% url "download_txt" %}',
+        pdf: '{% url "download_pdf" %}',
+        srt: '{% url "download_srt" %}',
+        json: '{% url "download_json" %}',
+        docx: '{% url "download_docx" %}',
+      };
+
+      const url = endpoints[format];
+      if (!url) return;
+
+      const prog = document.getElementById('downloadProgress');
+      const stat = document.getElementById('downloadStatus');
+      prog.classList.remove('d-none');
+      stat.textContent = 'Downloading ' + format.toUpperCase() + '...';
+
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCSRFToken() },
+        body: JSON.stringify({
+          original: original,
+          translated: translated,
+          language: selectedLang,
+        }),
+      })
+      .then(r => {
+        const disposition = r.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename="?(.+?)"?$/);
+        const filename = match ? match[1] : 'transcript.' + format;
+        return r.blob().then(blob => ({ blob, filename }));
+      })
+      .then(({ blob, filename }) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        prog.classList.add('d-none');
+        stat.innerHTML = '<i class="fas fa-check-circle text-success me-1"></i> Download complete';
+        setTimeout(() => stat.textContent = '', 3000);
+      })
+      .catch(() => {
+        prog.classList.add('d-none');
+        stat.textContent = 'Download failed';
+      });
+    });
+  });
+
+  /* ---- Copy buttons ---- */
+  copyOriginalBtn.addEventListener('click', function() {
+    if (!finalTranscript.trim()) return;
+    navigator.clipboard.writeText(finalTranscript).then(() => {
+      const orig = this.innerHTML;
+      this.innerHTML = '<i class="fas fa-check text-success"></i>';
+      setTimeout(() => this.innerHTML = orig, 1500);
+    }).catch(() => {});
+  });
+
+  copyTranslationBtn.addEventListener('click', function() {
+    if (!translatedText.trim()) return;
+    navigator.clipboard.writeText(translatedText).then(() => {
+      const orig = this.innerHTML;
+      this.innerHTML = '<i class="fas fa-check text-success"></i>';
+      setTimeout(() => this.innerHTML = orig, 1500);
+    }).catch(() => {});
+  });
+
+  /* ---- Clear ---- */
+  clearBtn.addEventListener('click', function() {
+    stopListening();
+    finalTranscript = '';
+    interimTranscript = '';
+    translatedText = '';
+    originalTextBox.innerHTML = '<span class="text-muted" id="originalPlaceholder">Your speech will appear here...</span>';
+    translationTextBox.innerHTML = '<span class="text-muted" id="translationPlaceholder">Translation will appear here...</span>';
+    translatedText = '';
+    wordCountBadge.innerHTML = '<i class="fas fa-font"></i> 0 words';
+    charCountBadge.innerHTML = '<i class="fas fa-text-width"></i> 0 chars';
+    timerDisplay.innerHTML = '<i class="far fa-clock"></i> 00:00';
+    seconds = 0;
+    generateVoiceBtn.disabled = true;
+    audioPlayerContainer.classList.add('d-none');
+    document.querySelectorAll('.download-btn').forEach(b => b.disabled = true);
+    document.getElementById('downloadStatus').textContent = '';
+    setStatus('info', '<i class="fas fa-eraser me-1"></i> Cleared. Click Start to begin again.');
+  });
+
+  /* ---- Speed options ---- */
+  speedNormal.addEventListener('click', function() {
+    voiceSpeed = 'normal';
+    speedNormal.classList.add('active');
+    speedSlow.classList.remove('active');
+  });
+  speedSlow.addEventListener('click', function() {
+    voiceSpeed = 'slow';
+    speedSlow.classList.add('active');
+    speedNormal.classList.remove('active');
+  });
+
+  /* ---- Button event wiring ---- */
+  startBtn.addEventListener('click', function() {
+    if (isPaused) {
+      startListening();
+      return;
+    }
+    liveWave.classList.remove('hidden');
+    startListening();
+  });
+
+  pauseBtn.addEventListener('click', function() {
+    pauseListening();
+    liveWave.classList.add('hidden');
+  });
+
+  stopBtn.addEventListener('click', function() {
+    stopListening();
+    liveWave.classList.add('hidden');
+    // Final translate
+    if (finalTranscript.trim() && selectedLang) {
+      translateChunk(finalTranscript, true);
+    }
+  });
+
+  /* ---- Helpers ---- */
+  function updateUI() {
+    startBtn.classList.toggle('d-none', isRecording && !isPaused);
+    pauseBtn.classList.toggle('d-none', !isRecording || isPaused);
+    stopBtn.classList.toggle('d-none', !isRecording);
+    if (isRecording && !isPaused) {
+      liveWave.classList.remove('hidden');
+    }
+    // Enable/disable download buttons when text available
+    const hasText = finalTranscript.trim().length > 0 || translatedText.trim().length > 0;
+    document.querySelectorAll('.download-btn').forEach(b => b.disabled = !hasText);
+  }
+
+  function setStatus(type, msg) {
+    liveStatus.innerHTML = msg;
+    liveStatus.className = 'live-status mb-2 text-center';
+    if (type === 'error') liveStatus.className += ' text-danger';
+    else if (type === 'success') liveStatus.className += ' text-success';
+    else liveStatus.className += ' text-muted';
+  }
+
+  function formatTime(s) {
+    const m = String(Math.floor(s / 60)).padStart(2, '0');
+    const sec = String(s % 60).padStart(2, '0');
+    return m + ':' + sec;
+  }
+
+  function getCSRFToken() {
+    const m = document.cookie.match(/csrftoken=([\w-]+)/);
+    return m ? m[1] : '';
+  }
+
+  const entityMap = { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' };
+  function escapeHtml(s) { return String(s).replace(/[&<>"']/g, ch => entityMap[ch]); }
+
+  /* ---- Keyboard accessibility ---- */
+  document.addEventListener('keydown', function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === ' ' && !e.repeat && !isRecording && !isPaused) { e.preventDefault(); startBtn.click(); }
+  });
+
+})();
+</script>
+{% endblock %}
