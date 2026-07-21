@@ -17,6 +17,8 @@ build/
 db.sqlite3
 *.sqlite3
 local_settings.py
+*.log
+logs/
 
 # Environment variables
 .env
@@ -24,12 +26,10 @@ local_settings.py
 .env.production
 
 # Media files
-media/uploads/*
-media/audio/*
-media/output/*
-!media/uploads/.gitkeep
-!media/audio/.gitkeep
-!media/output/.gitkeep
+media/
+
+# Static files (collected)
+staticfiles/
 
 # IDE
 .vscode/
@@ -39,9 +39,5 @@ media/output/*
 *~
 .DS_Store
 
-# Logs
-*.log
-logs/
-
-# Virtual environment backup
-venv_backup/
+# Whisper model cache
+.cache/

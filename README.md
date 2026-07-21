@@ -1,4 +1,4 @@
-# AI Speech Platform
+# AI Speech Assistant
 
 An intelligent speech recognition, translation, and text-to-speech web application built with Django.
 

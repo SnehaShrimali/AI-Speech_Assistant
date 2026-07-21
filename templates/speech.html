@@ -266,8 +266,14 @@
 
   /* ---- Helpers ---- */
   function getCSRFToken() {
-    const m = document.cookie.match(/csrftoken=([\w-]+)/);
-    return m ? m[1] : '';
+    var cookieMatch = document.cookie.match(/csrftoken=([\w-]+)/);
+    if (cookieMatch) return cookieMatch[1];
+    var metaTag = document.querySelector('meta[name="csrf-token"]');
+    if (metaTag) return metaTag.getAttribute('content');
+    var hiddenInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    if (hiddenInput) return hiddenInput.value;
+    console.warn('[Speech] CSRF token not found in cookie, meta, or hidden input');
+    return '';
   }
 
   function formatTime(s) {
@@ -403,6 +409,7 @@
 
     mediaRecorder.onstop = async () => {
       if (audioChunks.length === 0) {
+        console.warn('[Speech] Recording produced no audio chunks');
         setStatus('<i class="fas fa-exclamation-circle me-1"></i>Empty recording. Please try again.', 'error');
         stopStream();
         resetRecordingUI();
@@ -411,29 +418,76 @@
       }
 
       const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      console.log('[Speech] Recording blob size:', blob.size, 'bytes, type:', blob.type);
       showRecordSpinner('Transcribing recording...');
 
-      const fd = new FormData();
+      var csrfToken = getCSRFToken();
+      if (!csrfToken) {
+        console.error('[Speech] No CSRF token available — request will likely fail with 403');
+      }
+
+      var fd = new FormData();
       fd.append('audio_blob', blob, 'recording.' + (mimeType.includes('mp4') ? 'mp4' : 'webm'));
-      fd.append('csrfmiddlewaretoken', getCSRFToken());
+      fd.append('csrfmiddlewaretoken', csrfToken);
       fd.append('language', languageSelect ? languageSelect.value : 'auto');
 
       try {
-        const resp = await fetch('{% url "speech:process_recording" %}', {
-          method: 'POST', body: fd
+        console.log('[Speech] Sending recording to:', '{% url "speech:process_recording" %}');
+        var resp = await fetch('{% url "speech:process_recording" %}', {
+          method: 'POST',
+          body: fd,
+          redirect: 'manual'
         });
-        const data = await resp.json();
+
+        console.log('[Speech] Response status:', resp.status, 'redirected:', resp.redirected, 'type:', resp.type);
+
+        if (resp.type === 'opaqueredirect' || resp.status === 302 || resp.status === 301) {
+          console.error('[Speech] Request was redirected (status ' + resp.status + ') — session may have expired');
+          hideRecordSpinner();
+          setStatus('<i class="fas fa-sign-in-alt me-1"></i>Session expired. <a href="/accounts/login/" class="alert-link">Log in again</a>.', 'error');
+          stopStream();
+          resetRecordingUI();
+          isProcessing = false;
+          return;
+        }
+
+        var data;
+        try {
+          data = await resp.json();
+        } catch (parseErr) {
+          console.error('[Speech] Could not parse response as JSON:', parseErr);
+          hideRecordSpinner();
+          if (resp.status === 403) {
+            setStatus('<i class="fas fa-shield-alt me-1"></i>Security token (CSRF) expired. Please refresh the page and try again.', 'error');
+          } else if (resp.status === 401) {
+            setStatus('<i class="fas fa-sign-in-alt me-1"></i>Not authenticated. <a href="/accounts/login/" class="alert-link">Log in</a> and try again.', 'error');
+          } else {
+            setStatus('<i class="fas fa-exclamation-triangle me-1"></i>Server error (HTTP ' + resp.status + '). Check the server logs.', 'error');
+          }
+          stopStream();
+          resetRecordingUI();
+          isProcessing = false;
+          return;
+        }
+
         hideRecordSpinner();
 
         if (data.success) {
           displayResult(data);
+          console.log('[Speech] Transcription successful:', data.text.substring(0, 100));
           setStatus('<i class="fas fa-check-circle me-1"></i>Transcription complete!', 'success');
         } else {
+          console.error('[Speech] Transcription failed:', data.error);
           setStatus('<i class="fas fa-exclamation-circle me-1"></i>' + (data.error || 'Transcription failed'), 'error');
         }
       } catch (err) {
+        console.error('[Speech] Fetch error:', err.name, err.message, err);
         hideRecordSpinner();
-        setStatus('<i class="fas fa-exclamation-triangle me-1"></i>Network error. Check connection and try again.', 'error');
+        if (err.name === 'TypeError' && err.message.includes('Failed to fetch')) {
+          setStatus('<i class="fas fa-exclamation-triangle me-1"></i>Network error: server unreachable. Is the Django server running?', 'error');
+        } else {
+          setStatus('<i class="fas fa-exclamation-triangle me-1"></i>Error: ' + err.message, 'error');
+        }
       }
 
       stopStream();
@@ -545,33 +599,57 @@
     if (isProcessing) return;
     isProcessing = true;
 
-    const fd = new FormData();
+    var fd = new FormData();
     fd.append('audio_file', file);
     fd.append('language', languageSelect ? languageSelect.value : 'auto');
     fd.append('csrfmiddlewaretoken', getCSRFToken());
 
     showUploadSpinner('Uploading...');
+    console.log('[Speech] Uploading file:', file.name, '(' + (file.size / 1024 / 1024).toFixed(2) + ' MB)');
 
     try {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', '{% url "speech:speech" %}', true);
-      xhr.timeout = 180000;
+      var result = await new Promise(function(resolve, reject) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '{% url "speech:speech" %}', true);
+        xhr.timeout = 180000;
 
-      xhr.upload.onprogress = function(e) {
-        if (e.lengthComputable) {
-          const pct = Math.round((e.loaded / e.total) * 100);
-          uploadProgress.style.width = pct + '%';
-          document.getElementById('uploadSpinnerText').textContent = 'Uploading ' + pct + '%...';
-        }
-      };
-
-      const result = await new Promise((resolve, reject) => {
-        xhr.onload = function() {
-          try { resolve(JSON.parse(xhr.responseText)); }
-          catch(e) { reject(new Error('Invalid server response')); }
+        xhr.upload.onprogress = function(e) {
+          if (e.lengthComputable) {
+            var pct = Math.round((e.loaded / e.total) * 100);
+            uploadProgress.style.width = pct + '%';
+            document.getElementById('uploadSpinnerText').textContent = 'Uploading ' + pct + '%...';
+          }
         };
-        xhr.onerror = () => reject(new Error('Network error'));
-        xhr.ontimeout = () => reject(new Error('Request timed out'));
+
+        xhr.onload = function() {
+          console.log('[Speech] Upload response status:', xhr.status);
+          if (xhr.status === 301 || xhr.status === 302) {
+            reject(new Error('Session expired. Please log in again.'));
+            return;
+          }
+          if (!xhr.responseText) {
+            reject(new Error('Empty server response'));
+            return;
+          }
+          try {
+            var json = JSON.parse(xhr.responseText);
+            if (!xhr.status.toString().startsWith('2')) {
+              console.error('[Speech] Upload error (HTTP ' + xhr.status + '):', json.error || xhr.responseText.substring(0, 300));
+            }
+            resolve(json);
+          } catch(e) {
+            console.error('[Speech] Failed to parse upload response:', xhr.responseText.substring(0, 500));
+            reject(new Error('Invalid server response (HTTP ' + xhr.status + ')'));
+          }
+        };
+        xhr.onerror = function() {
+          console.error('[Speech] XHR network error');
+          reject(new Error('Network error — server unreachable. Is the Django server running?'));
+        };
+        xhr.ontimeout = function() {
+          console.error('[Speech] XHR timeout after 180s');
+          reject(new Error('Upload timed out after 180 seconds. Try a smaller file.'));
+        };
         xhr.send(fd);
       });
 
@@ -580,12 +658,15 @@
       if (result.success) {
         displayResult(result);
         fileInfo.classList.add('d-none');
+        console.log('[Speech] Upload transcription successful');
         setStatus('<i class="fas fa-check-circle me-1"></i>Transcription complete!', 'success');
       } else {
+        console.error('[Speech] Upload transcription failed:', result.error);
         setStatus('<i class="fas fa-exclamation-circle me-1"></i>' + (result.error || 'Processing failed'), 'error');
       }
     } catch (err) {
       hideUploadSpinner();
+      console.error('[Speech] Upload error:', err.message);
       setStatus('<i class="fas fa-exclamation-triangle me-1"></i>' + err.message, 'error');
     }
 
