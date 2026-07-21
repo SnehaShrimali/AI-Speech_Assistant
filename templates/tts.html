@@ -3,6 +3,13 @@
 
 {% block title %}Text to Speech{% endblock %}
 
+{% block extra_css %}
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&family=Noto+Sans+Tamil:wght@400;500;600;700&family=Noto+Sans+Telugu:wght@400;500;600;700&family=Noto+Sans+Gujarati:wght@400;500;600;700&family=Noto+Sans+Gurmukhi:wght@400;500;600;700&family=Noto+Sans+Malayalam:wght@400;500;600;700&family=Noto+Sans+Kannada:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  .text-rtl { direction: rtl; text-align: right; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="fw-bold mb-0"><i class="fas fa-volume-up me-2 text-warning"></i>Text to Speech</h4>
@@ -71,4 +78,28 @@
         </div>
     </div>
 </div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const RTL_LANGUAGES = ['ar', 'ur', 'he', 'fa', 'yi', 'dv'];
+    function isRtl(code) { return RTL_LANGUAGES.includes(code); }
+
+    (function() {
+        const langSelect = document.querySelector('select[name="language"]');
+        const textarea = document.querySelector('textarea[name="text"]');
+
+        function applyDir() {
+            if (langSelect && textarea) {
+                textarea.dir = isRtl(langSelect.value) ? 'rtl' : 'ltr';
+            }
+        }
+
+        if (langSelect) {
+            langSelect.addEventListener('change', applyDir);
+            applyDir();
+        }
+    })();
+</script>
 {% endblock %}

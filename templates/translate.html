@@ -3,6 +3,13 @@
 
 {% block title %}Translation{% endblock %}
 
+{% block extra_css %}
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&family=Noto+Sans+Tamil:wght@400;500;600;700&family=Noto+Sans+Telugu:wght@400;500;600;700&family=Noto+Sans+Gujarati:wght@400;500;600;700&family=Noto+Sans+Gurmukhi:wght@400;500;600;700&family=Noto+Sans+Malayalam:wght@400;500;600;700&family=Noto+Sans+Kannada:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  .text-rtl { direction: rtl; text-align: right; }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="fw-bold mb-0"><i class="fas fa-language me-2 text-success"></i>Translation</h4>
@@ -20,7 +27,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label fw-medium">Translate to</label>
-                        <select name="target_language" class="form-select" required>
+                        <select name="target_language" class="form-select" id="targetLangSelect" required>
                             <option value="">Select language...</option>
                             {% for code, name in languages.items %}
                                 <option value="{{ code }}" {% if target_lang == code %}selected{% endif %}>{{ name }}</option>
@@ -40,8 +47,8 @@
             <div class="card-body p-4">
                 <h5 class="fw-bold mb-3"><i class="fas fa-check-circle me-2 text-primary"></i>Translated Text</h5>
                 {% if translated_text %}
-                    <div class="bg-light p-4 rounded-3 mb-3">
-                        <p class="mb-0">{{ translated_text }}</p>
+                    <div class="bg-light p-4 rounded-3 mb-3" id="translatedTextContainer">
+                        <p class="mb-0" id="translatedText">{{ translated_text }}</p>
                     </div>
                     <div class="d-flex gap-2 flex-wrap">
                         <a href="{% url 'tts:tts' %}?text={{ translated_text|urlencode }}&lang={{ target_lang }}" class="btn btn-primary">
@@ -65,6 +72,43 @@
 
 {% block extra_js %}
 <script>
+    const RTL_LANGUAGES = ['ar', 'ur', 'he', 'fa', 'yi', 'dv'];
+
+    function isRtl(langCode) {
+        return RTL_LANGUAGES.includes(langCode);
+    }
+
+    function applyTextDirection(langCode) {
+        const container = document.getElementById('translatedTextContainer');
+        const textEl = document.getElementById('translatedText');
+        if (container && textEl) {
+            if (isRtl(langCode)) {
+                container.classList.add('text-rtl');
+                textEl.dir = 'rtl';
+            } else {
+                container.classList.remove('text-rtl');
+                textEl.dir = 'ltr';
+            }
+        }
+    }
+
+    (function() {
+        const lang = '{{ target_lang }}';
+        if (lang) {
+            applyTextDirection(lang);
+        }
+
+        document.getElementById('targetLangSelect')?.addEventListener('change', function() {
+            if (isRtl(this.value)) {
+                this.style.direction = 'rtl';
+                this.style.textAlign = 'right';
+            } else {
+                this.style.direction = 'ltr';
+                this.style.textAlign = 'left';
+            }
+        });
+    })();
+
     function copyTranslation() {
         const text = `{{ translated_text|escapejs }}`;
         navigator.clipboard.writeText(text).then(() => {

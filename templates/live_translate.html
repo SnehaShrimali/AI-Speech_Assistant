@@ -4,6 +4,7 @@
 {% block title %}Live Speech Translation{% endblock %}
 
 {% block extra_css %}
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&family=Noto+Sans+Tamil:wght@400;500;600;700&family=Noto+Sans+Telugu:wght@400;500;600;700&family=Noto+Sans+Gujarati:wght@400;500;600;700&family=Noto+Sans+Gurmukhi:wght@400;500;600;700&family=Noto+Sans+Malayalam:wght@400;500;600;700&family=Noto+Sans+Kannada:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   .live-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 16px; padding: 2rem; color: #fff; }
   .live-header h2 { font-weight: 700; margin-bottom: 0.25rem; }
@@ -269,6 +270,11 @@
   let lastAudioUrl = '';
   let recognitionRestartTimer = null;
 
+  /* ---- RTL support ---- */
+  const RTL_LANGUAGES = ['ar', 'ur', 'he', 'fa', 'yi', 'dv'];
+  function isRtl(langCode) { return RTL_LANGUAGES.includes(langCode); }
+  function setDir(el, langCode) { if (el) { el.dir = isRtl(langCode) ? 'rtl' : 'ltr'; } }
+
   /* ---- Language search ---- */
   langSearch.addEventListener('input', function() {
     const q = this.value.toLowerCase();
@@ -284,6 +290,7 @@
     selectedLangLabel.textContent = item.dataset.name;
     langList.querySelectorAll('.lang-item').forEach(el => el.classList.remove('active'));
     item.classList.add('active');
+    setDir(translationTextBox, selectedLang);
     const dd = bootstrap.Dropdown.getInstance(langDropdownBtn);
     if (dd) dd.hide();
     if (finalTranscript.trim()) {
@@ -453,6 +460,7 @@
     if (translatedText) {
       translationTextBox.innerHTML = escapeHtml(translatedText);
       translationPlaceholder.style.display = 'none';
+      setDir(translationTextBox, selectedLang);
       generateVoiceBtn.disabled = false;
     }
   }

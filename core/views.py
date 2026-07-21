@@ -126,6 +126,41 @@ class DownloadPDFView(LoginRequiredMixin, View):
         from io import BytesIO
         buffer = BytesIO()
 
+        # Register a Unicode TTF font for non-Latin script support
+        _FONT_NAME = 'Helvetica'
+        _FONT_BOLD = 'Helvetica-Bold'
+        _unicode_font_paths = [
+            'C:/Windows/Fonts/arial.ttf',
+            'C:/Windows/Fonts/ARIAL.TTF',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+            '/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf',
+        ]
+        _unicode_font_bold_paths = [
+            'C:/Windows/Fonts/arialbd.ttf',
+            'C:/Windows/Fonts/ARIALBD.TTF',
+            '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+            '/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf',
+        ]
+        import os as _os
+        for _fp in _unicode_font_paths:
+            if _os.path.exists(_fp):
+                try:
+                    pdfmetrics.registerFont(TTFont('UnicodeFont', _fp))
+                    _FONT_NAME = 'UnicodeFont'
+                except Exception:
+                    pass
+                break
+        for _fp in _unicode_font_bold_paths:
+            if _os.path.exists(_fp):
+                try:
+                    pdfmetrics.registerFont(TTFont('UnicodeFontBold', _fp))
+                    _FONT_BOLD = 'UnicodeFontBold'
+                except Exception:
+                    pass
+                break
+
         doc = SimpleDocTemplate(
             buffer, pagesize=A4,
             topMargin=20*mm, bottomMargin=20*mm,
@@ -135,21 +170,25 @@ class DownloadPDFView(LoginRequiredMixin, View):
         styles = getSampleStyleSheet()
         title_style = ParagraphStyle(
             'CustomTitle', parent=styles['Title'],
+            fontName=_FONT_BOLD,
             fontSize=20, spaceAfter=20,
             textColor=HexColor('#667eea')
         )
         heading_style = ParagraphStyle(
             'CustomHeading', parent=styles['Heading2'],
+            fontName=_FONT_BOLD,
             fontSize=14, spaceAfter=10,
             textColor=HexColor('#764ba2')
         )
         body_style = ParagraphStyle(
             'CustomBody', parent=styles['Normal'],
+            fontName=_FONT_NAME,
             fontSize=11, spaceAfter=6,
             leading=16
         )
         meta_style = ParagraphStyle(
             'Meta', parent=styles['Normal'],
+            fontName=_FONT_NAME,
             fontSize=9, textColor=HexColor('#666666'),
             spaceAfter=4
         )
