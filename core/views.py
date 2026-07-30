@@ -1,19 +1,20 @@
 from django.shortcuts import render, redirect
-from django.contrib.auth.decorators import login_required
 from django.views.generic import View
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpResponse, JsonResponse
 from django.conf import settings
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
 from translation.services import SUPPORTED_LANGUAGES
 
 
-@login_required(login_url='accounts:login')
 def home(request):
     if request.user.is_authenticated:
         return redirect('dashboard:dashboard')
     return render(request, 'home.html')
 
 
+@method_decorator(ensure_csrf_cookie, name='dispatch')
 class LiveTranslateView(LoginRequiredMixin, View):
     template_name = 'live_translate.html'
 
