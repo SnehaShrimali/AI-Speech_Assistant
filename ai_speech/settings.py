@@ -3,6 +3,7 @@ import socket
 import warnings
 from pathlib import Path
 from dotenv import load_dotenv
+import dj_database_url
 
 load_dotenv()
 
@@ -63,27 +64,34 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ai_speech.wsgi.application'
 
-try:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(1.5)
-    sock.connect((os.getenv('DB_HOST', 'localhost'), int(os.getenv('DB_PORT', '5432'))))
-    sock.close()
-    DB_ENGINE = 'django.db.backends.postgresql'
-except Exception:
-    DB_ENGINE = 'django.db.backends.sqlite3'
-    warnings.warn("PostgreSQL not available. Falling back to SQLite for development.")
+# try:
+#     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#     sock.settimeout(1.5)
+#     sock.connect((os.getenv('DB_HOST', 'localhost'), int(os.getenv('DB_PORT', '5432'))))
+#     sock.close()
+#     DB_ENGINE = 'django.db.backends.postgresql'
+# except Exception:
+#     DB_ENGINE = 'django.db.backends.sqlite3'
+#     warnings.warn("PostgreSQL not available. Falling back to SQLite for development.")
+
+# DATABASES = {
+#     'default': {
+#         'ENGINE': DB_ENGINE,
+#         'NAME': os.getenv('DB_NAME', 'ai_speech_db') if DB_ENGINE != 'django.db.backends.sqlite3' else BASE_DIR / 'db.sqlite3',
+#         'USER': os.getenv('DB_USER', 'postgres') if DB_ENGINE != 'django.db.backends.sqlite3' else '',
+#         'PASSWORD': os.getenv('DB_PASSWORD', '') if DB_ENGINE != 'django.db.backends.sqlite3' else '',
+#         'HOST': os.getenv('DB_HOST', 'localhost') if DB_ENGINE != 'django.db.backends.sqlite3' else '',
+#         'PORT': os.getenv('DB_PORT', '5432') if DB_ENGINE != 'django.db.backends.sqlite3' else '',
+#     }
+# }
 
 DATABASES = {
-    'default': {
-        'ENGINE': DB_ENGINE,
-        'NAME': os.getenv('DB_NAME', 'ai_speech_db') if DB_ENGINE != 'django.db.backends.sqlite3' else BASE_DIR / 'db.sqlite3',
-        'USER': os.getenv('DB_USER', 'postgres') if DB_ENGINE != 'django.db.backends.sqlite3' else '',
-        'PASSWORD': os.getenv('DB_PASSWORD', '') if DB_ENGINE != 'django.db.backends.sqlite3' else '',
-        'HOST': os.getenv('DB_HOST', 'localhost') if DB_ENGINE != 'django.db.backends.sqlite3' else '',
-        'PORT': os.getenv('DB_PORT', '5432') if DB_ENGINE != 'django.db.backends.sqlite3' else '',
-    }
+    "default": dj_database_url.config(
+        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        conn_max_age=600,
+        ssl_require=False,
+    )
 }
-
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
     {'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator'},
