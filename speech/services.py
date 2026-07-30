@@ -18,6 +18,7 @@ LANGUAGE_CODES = {
     'pa': 'Punjabi', 'ne': 'Nepali', 'fr': 'French', 'de': 'German',
     'es': 'Spanish', 'ja': 'Japanese', 'zh': 'Chinese', 'ar': 'Arabic',
     'ru': 'Russian', 'pt': 'Portuguese', 'it': 'Italian', 'ko': 'Korean',
+    'ml': 'Malayalam', 'kn': 'Kannada',
 }
 
 
@@ -49,14 +50,38 @@ def convert_to_wav(audio_path):
         raise RuntimeError(f"Audio conversion failed: {e}")
 
 
-def recognize_with_whisper(audio_path):
-    logger.info("Attempting Whisper transcription on %s", audio_path)
+def preprocess_audio(audio_path):
+    try:
+        from pydub import AudioSegment
+        audio = AudioSegment.from_file(audio_path)
+        audio = audio.set_frame_rate(16000).set_channels(1)
+        if audio.dBFS < -35.0:
+            gain = min(12.0, -35.0 - audio.dBFS)
+            audio = audio.apply_gain(gain)
+        preprocessed_path = os.path.splitext(audio_path)[0] + '_preprocessed.wav'
+        audio.export(preprocessed_path, format='wav')
+        logger.info("Preprocessed audio: %s (dBFS=%.1f, improved=%.1fdB)", preprocessed_path, audio.dBFS, gain if audio.dBFS < -35.0 else 0)
+        return preprocessed_path
+    except Exception as e:
+        logger.warning("Audio preprocessing failed (continuing with original): %s", e)
+        return audio_path
+
+
+def recognize_with_whisper(audio_path, language=None):
+    logger.info("Attempting Whisper transcription on %s (lang_hint=%s)", audio_path, language or 'auto')
     model = get_whisper_model()
-    result = model.transcribe(audio_path, fp16=False)
+    transcribe_kwargs = {'fp16': False}
+    if language and language != 'auto':
+        transcribe_kwargs['language'] = language
+    result = model.transcribe(audio_path, **transcribe_kwargs)
     text = result.get("text", "").strip()
     lang = result.get("language", "")
-    logger.info("Whisper result: %d chars, lang=%s", len(text), lang)
-    return text, lang
+    segments = result.get("segments", [])
+    lang_probs = None
+    if segments and len(segments) > 0:
+        lang_probs = segments[0].get("language_probs", None)
+    logger.info("Whisper result: %d chars, lang=%s, segments=%d", len(text), lang, len(segments))
+    return text, lang, lang_probs
 
 
 def recognize_with_speechrecognition(audio_path):
@@ -67,7 +92,7 @@ def recognize_with_speechrecognition(audio_path):
         recognizer.adjust_for_ambient_noise(source, duration=0.5)
         audio = recognizer.record(source)
     try:
-        text = recognizer.recognize_google(audio)
+        text = recognizer.recognize_google(audio, language='en-in')
         logger.info("Google SR result: %d chars", len(text))
         return text, 'en'
     except sr.UnknownValueError:
@@ -78,7 +103,7 @@ def recognize_with_speechrecognition(audio_path):
         raise RuntimeError(f"Speech recognition service error: {e}")
 
 
-def process_audio(audio_path):
+def process_audio(audio_path, language='auto'):
     if not os.path.exists(audio_path):
         logger.error("Audio file not found: %s", audio_path)
         raise FileNotFoundError("Audio file not found")
@@ -91,12 +116,24 @@ def process_audio(audio_path):
     wav_path = convert_to_wav(audio_path)
     is_temp_wav = wav_path != audio_path
 
+    temppaths = []
+    if is_temp_wav:
+        temppaths.append(wav_path)
+
     try:
+        preprocessed = preprocess_audio(wav_path)
+        if preprocessed != wav_path:
+            temppaths.append(preprocessed)
+
         errors = []
         try:
-            text, lang = recognize_with_whisper(wav_path)
+            text, lang, lang_probs = recognize_with_whisper(preprocessed, language=language)
             if text:
-                return text, lang
+                from utils.text_postprocessor import TextPostProcessor
+                cleaned = TextPostProcessor.clean_whisper_output(text)
+                if cleaned:
+                    text = cleaned
+                return text, lang, lang_probs
             logger.info("Whisper returned empty text (audio may be silent or too quiet)")
             errors.append("Whisper: no speech detected in audio")
         except Exception as e:
@@ -104,9 +141,9 @@ def process_audio(audio_path):
             errors.append(f"Whisper: {e}")
 
         try:
-            text, lang = recognize_with_speechrecognition(wav_path)
+            text, lang = recognize_with_speechrecognition(preprocessed)
             if text:
-                return text, lang
+                return text, lang, None
         except Exception as e:
             logger.warning("Google SR failed: %s", e)
             errors.append(f"GoogleSR: {e}")
@@ -115,11 +152,12 @@ def process_audio(audio_path):
         logger.error(msg)
         raise RuntimeError(msg)
     finally:
-        if is_temp_wav and os.path.exists(wav_path):
-            try:
-                os.remove(wav_path)
-            except OSError:
-                pass
+        for p in temppaths:
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except OSError:
+                    pass
 
 
 def validate_audio_file(uploaded_file):

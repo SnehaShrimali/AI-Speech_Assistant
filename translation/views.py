@@ -6,7 +6,7 @@ from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from .models import TranslationRecord
-from .services import translate_text, SUPPORTED_LANGUAGES
+from .services import translate_text, SUPPORTED_LANGUAGES, detect_language_with_confidence
 from history.services import add_history_entry
 
 
@@ -34,12 +34,16 @@ class TranslateView(LoginRequiredMixin, TemplateView):
             })
 
         try:
-            translated_text = translate_text(source_text, target_language)
+            detected = detect_language_with_confidence(source_text)
+            source_lang = detected['language']
+
+            translated_text = translate_text(source_text, target_language, source_language=source_lang)
 
             TranslationRecord.objects.create(
                 user=request.user,
                 source_text=source_text,
                 translated_text=translated_text,
+                source_language=source_lang,
                 target_language=target_language,
             )
 
@@ -57,6 +61,9 @@ class TranslateView(LoginRequiredMixin, TemplateView):
                 'source_text': source_text,
                 'translated_text': translated_text,
                 'target_lang': target_language,
+                'detected_lang': detected['language'],
+                'detected_lang_name': detected['language_name'],
+                'detected_confidence': detected['confidence'],
             })
 
         except Exception as e:
@@ -73,6 +80,9 @@ class TranslateView(LoginRequiredMixin, TemplateView):
         context['source_text'] = self.request.GET.get('text', '')
         context['translated_text'] = kwargs.get('translated_text', '')
         context['target_lang'] = kwargs.get('target_lang', '')
+        context['detected_lang'] = kwargs.get('detected_lang', '')
+        context['detected_lang_name'] = kwargs.get('detected_lang_name', '')
+        context['detected_confidence'] = kwargs.get('detected_confidence', 0)
         return context
 
 
@@ -86,6 +96,7 @@ class TranslateAPIView(LoginRequiredMixin, View):
 
         text = data.get('text', '').strip()
         target_lang = data.get('target_lang', 'en')
+        source_lang = data.get('source_lang', 'auto')
 
         if not text:
             return JsonResponse({'error': 'No text provided'}, status=400)
@@ -93,12 +104,45 @@ class TranslateAPIView(LoginRequiredMixin, View):
             return JsonResponse({'error': 'Unsupported language'}, status=400)
 
         try:
-            translated = translate_text(text, target_lang)
+            detected = detect_language_with_confidence(text)
+            detected_code = detected['language']
+            actual_source = source_lang if source_lang != 'auto' else detected_code
+
+            translated = translate_text(text, target_lang, source_language=actual_source)
+
             return JsonResponse({
                 'success': True,
                 'translated': translated,
                 'original': text,
                 'target_lang': target_lang,
+                'source_lang': source_lang,
+                'detected_lang': detected['language'],
+                'detected_lang_name': detected['language_name'],
+                'detected_confidence': detected['confidence'],
+            })
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+
+class LanguageDetectAPIView(LoginRequiredMixin, View):
+    def post(self, request, *args, **kwargs):
+        import json
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+        text = data.get('text', '').strip()
+        if not text:
+            return JsonResponse({'error': 'No text provided'}, status=400)
+
+        try:
+            detected = detect_language_with_confidence(text)
+            return JsonResponse({
+                'success': True,
+                'detected_lang': detected['language'],
+                'detected_lang_name': detected['language_name'],
+                'confidence': detected['confidence'],
             })
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=500)

@@ -126,10 +126,9 @@
     <div class="d-flex align-items-center justify-content-end gap-2">
       <label class="text-muted small fw-medium">Language:</label>
       <select id="languageSelect" class="form-select form-select-sm" style="width: auto;">
-        <option value="auto">Auto Detect</option>
-        <option value="en">English</option>
-        <option value="hi">Hindi</option>
-        <option value="gu">Gujarati</option>
+        {% for code, name in languages.items %}
+        <option value="{{ code }}">{{ name }}</option>
+        {% endfor %}
       </select>
     </div>
   </div>
@@ -321,7 +320,12 @@
 
     if (data.language) {
       detectedLang.classList.remove('d-none');
-      detectedLang.textContent = data.language;
+      var langLabel = data.language_name || data.language;
+      if (data.language_confidence !== null && data.language_confidence !== undefined) {
+        var pct = Math.round(data.language_confidence * 100);
+        langLabel += ' (' + pct + '%)';
+      }
+      detectedLang.textContent = langLabel;
     } else {
       detectedLang.classList.add('d-none');
     }

@@ -1,12 +1,10 @@
 import os
-import json
 import uuid
 import logging
 import traceback
-from pathlib import Path
 
 from django.conf import settings
-from django.http import JsonResponse, HttpResponseBadRequest
+from django.http import JsonResponse
 from django.shortcuts import render
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -16,7 +14,8 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 
 from .models import SpeechRecord
-from .services import process_audio, validate_audio_file, get_audio_duration
+from .services import process_audio, validate_audio_file, get_audio_duration, LANGUAGE_CODES as SPEECH_LANGUAGES
+from utils.language_utils import LanguageUtils
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +56,7 @@ class SpeechView(LoginRequiredMixin, TemplateView):
             logger.info("SpeechView: processing audio %s", filepath)
 
             try:
-                recognized_text, detected_lang = process_audio(filepath)
+                recognized_text, detected_lang, lang_probs = process_audio(filepath, language=selected_lang)
             except (RuntimeError, FileNotFoundError) as e:
                 logger.warning("SpeechView: recognition failed: %s", e)
                 if os.path.exists(filepath):
@@ -68,7 +67,12 @@ class SpeechView(LoginRequiredMixin, TemplateView):
                 })
 
             duration = get_audio_duration(filepath)
-            logger.info("SpeechView: recognized %d chars, lang=%s, duration=%.1fs", len(recognized_text), detected_lang, duration)
+            logger.info("SpeechView: recognized %d chars, lang=%s, duration=%.1fs, probs=%s",
+                        len(recognized_text), detected_lang, duration, lang_probs)
+
+            confidence = None
+            if lang_probs and detected_lang in lang_probs:
+                confidence = round(float(lang_probs[detected_lang]), 4)
 
             record = SpeechRecord.objects.create(
                 user=request.user,
@@ -90,7 +94,9 @@ class SpeechView(LoginRequiredMixin, TemplateView):
             return JsonResponse({
                 'success': True,
                 'text': recognized_text,
-                'language': detected_lang or '',
+                'language': LanguageUtils.normalize_code(detected_lang) if detected_lang else 'en',
+                'language_name': LanguageUtils.get_name(detected_lang) if detected_lang else 'English',
+                'language_confidence': confidence,
                 'duration': round(duration, 1),
                 'word_count': len(recognized_text.split()),
                 'char_count': len(recognized_text),
@@ -105,12 +111,9 @@ class SpeechView(LoginRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context['recognized_text'] = kwargs.get('recognized_text', '')
-        context['languages'] = {
-            'auto': 'Auto Detect',
-            'en': 'English',
-            'hi': 'Hindi',
-            'gu': 'Gujarati',
-        }
+        all_langs = dict(SPEECH_LANGUAGES)
+        all_langs['auto'] = 'Auto Detect'
+        context['languages'] = all_langs
         context['max_recording_duration'] = getattr(settings, 'MAX_RECORDING_DURATION', 300)
         return context
 
@@ -158,7 +161,7 @@ class ProcessRecordingView(LoginRequiredMixin, View):
             logger.info("ProcessRecordingView: saved %d bytes to %s, processing...", file_size, filepath)
 
             try:
-                recognized_text, detected_lang = process_audio(filepath)
+                recognized_text, detected_lang, lang_probs = process_audio(filepath, language=selected_lang)
             except (RuntimeError, FileNotFoundError) as e:
                 logger.warning("ProcessRecordingView: recognition failed: %s", e)
                 if filepath and os.path.exists(filepath):
@@ -169,7 +172,12 @@ class ProcessRecordingView(LoginRequiredMixin, View):
                 })
 
             duration = get_audio_duration(filepath)
-            logger.info("ProcessRecordingView: recognized %d chars, lang=%s, duration=%.1fs", len(recognized_text), detected_lang, duration)
+            logger.info("ProcessRecordingView: recognized %d chars, lang=%s, duration=%.1fs, probs=%s",
+                        len(recognized_text), detected_lang, duration, lang_probs)
+
+            confidence = None
+            if lang_probs and detected_lang in lang_probs:
+                confidence = round(float(lang_probs[detected_lang]), 4)
 
             record = SpeechRecord.objects.create(
                 user=request.user,
@@ -190,7 +198,9 @@ class ProcessRecordingView(LoginRequiredMixin, View):
             return JsonResponse({
                 'success': True,
                 'text': recognized_text,
-                'language': detected_lang or '',
+                'language': LanguageUtils.normalize_code(detected_lang) if detected_lang else 'en',
+                'language_name': LanguageUtils.get_name(detected_lang) if detected_lang else 'English',
+                'language_confidence': confidence,
                 'duration': round(duration, 1),
                 'word_count': len(recognized_text.split()),
                 'char_count': len(recognized_text),
