@@ -9,6 +9,7 @@ warnings.filterwarnings('ignore', category=UserWarning, module='whisper')
 logger = logging.getLogger(__name__)
 
 _whisper_model = None
+_whisper_available = None
 
 SUPPORTED_AUDIO_EXTENSIONS = {'.wav', '.mp3', '.m4a', '.ogg', '.flac', '.webm'}
 
@@ -23,13 +24,21 @@ LANGUAGE_CODES = {
 
 
 def get_whisper_model():
-    global _whisper_model
+    global _whisper_model, _whisper_available
+    if _whisper_available is False:
+        return None
     if _whisper_model is None:
-        logger.info("Loading Whisper model (size=%s)...", getattr(settings, 'WHISPER_MODEL_SIZE', 'base'))
-        import whisper
-        model_size = getattr(settings, 'WHISPER_MODEL_SIZE', 'base')
-        _whisper_model = whisper.load_model(model_size)
-        logger.info("Whisper model loaded successfully")
+        try:
+            import whisper
+            _whisper_available = True
+            logger.info("Loading Whisper model (size=%s)...", getattr(settings, 'WHISPER_MODEL_SIZE', 'base'))
+            model_size = getattr(settings, 'WHISPER_MODEL_SIZE', 'base')
+            _whisper_model = whisper.load_model(model_size)
+            logger.info("Whisper model loaded successfully")
+        except (ImportError, OSError) as e:
+            _whisper_available = False
+            logger.warning("Whisper not available (%s), will use Google Speech Recognition fallback", e)
+            return None
     return _whisper_model
 
 
@@ -68,8 +77,11 @@ def preprocess_audio(audio_path):
 
 
 def recognize_with_whisper(audio_path, language=None):
-    logger.info("Attempting Whisper transcription on %s (lang_hint=%s)", audio_path, language or 'auto')
     model = get_whisper_model()
+    if model is None:
+        logger.info("Whisper not available, skipping")
+        raise RuntimeError("Whisper model not loaded")
+    logger.info("Attempting Whisper transcription on %s (lang_hint=%s)", audio_path, language or 'auto')
     transcribe_kwargs = {'fp16': False}
     if language and language != 'auto':
         transcribe_kwargs['language'] = language

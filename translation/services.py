@@ -66,22 +66,22 @@ def detect_language_with_confidence(text: str) -> dict:
     # Use a simple character-based heuristic
     import unicodedata
     ranges = {
-        'gu': ('\u0A80', '\u0AFF', 'Gujarati'),
-        'hi': ('\u0900', '\u097F', 'Hindi'),
-        'mr': ('\u0900', '\u097F', 'Marathi'),
-        'bn': ('\u0980', '\u09FF', 'Bengali'),
-        'ta': ('\u0B80', '\u0BFF', 'Tamil'),
-        'te': ('\u0C00', '\u0C7F', 'Telugu'),
-        'kn': ('\u0C80', '\u0CFF', 'Kannada'),
-        'ml': ('\u0D00', '\u0D7F', 'Malayalam'),
-        'pa': ('\u0A00', '\u0A7F', 'Punjabi'),
-        'or': ('\u0B00', '\u0B7F', 'Odia'),
-        'ar': ('\u0600', '\u06FF', 'Arabic'),
-        'ur': ('\u0600', '\u06FF', 'Urdu'),
-        'ja': ('\u3040', '\u30FF', 'Japanese'),
-        'zh': ('\u4E00', '\u9FFF', 'Chinese'),
-        'ko': ('\uAC00', '\uD7AF', 'Korean'),
-        'ru': ('\u0400', '\u04FF', 'Russian'),
+        'gu': (0x0A80, 0x0AFF, 'Gujarati'),
+        'hi': (0x0900, 0x097F, 'Hindi'),
+        'mr': (0x0900, 0x097F, 'Marathi'),
+        'bn': (0x0980, 0x09FF, 'Bengali'),
+        'ta': (0x0B80, 0x0BFF, 'Tamil'),
+        'te': (0x0C00, 0x0C7F, 'Telugu'),
+        'kn': (0x0C80, 0x0CFF, 'Kannada'),
+        'ml': (0x0D00, 0x0D7F, 'Malayalam'),
+        'pa': (0x0A00, 0x0A7F, 'Punjabi'),
+        'or': (0x0B00, 0x0B7F, 'Odia'),
+        'ar': (0x0600, 0x06FF, 'Arabic'),
+        'ur': (0x0600, 0x06FF, 'Urdu'),
+        'ja': (0x3040, 0x30FF, 'Japanese'),
+        'zh': (0x4E00, 0x9FFF, 'Chinese'),
+        'ko': (0xAC00, 0xD7AF, 'Korean'),
+        'ru': (0x0400, 0x04FF, 'Russian'),
     }
 
     text_sample = text[:500]

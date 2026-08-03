@@ -41,3 +41,6 @@ staticfiles/
 
 # Whisper model cache
 .cache/
+
+# Render build script (must be tracked)
+!build.sh
